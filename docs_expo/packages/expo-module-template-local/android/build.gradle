@@ -1,0 +1,18 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = '<%- project.package %>'
+version = '0.7.6'
+
+android {
+  namespace "<%- project.package %>"
+  defaultConfig {
+    versionCode 1
+    versionName "0.7.6"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}

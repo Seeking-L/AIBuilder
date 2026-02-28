@@ -1,0 +1,212 @@
+import { Platform } from 'expo-modules-core';
+
+import { optionalRequire } from '../../navigation/routeBuilder';
+import ComponentListScreen, { componentScreensToListElements } from '../ComponentListScreen';
+
+export const ImageScreens = [
+  {
+    name: 'Comparison with original image',
+    route: 'image/comparison',
+    options: {},
+    getComponent() {
+      return optionalRequire(() => require('./ImageComparisonScreen'));
+    },
+  },
+  {
+    name: 'Animated styles',
+    route: 'image/animated-styles',
+    options: {},
+    getComponent() {
+      return optionalRequire(() => require('./ImageAnimatedStyles'));
+    },
+  },
+  {
+    name: 'Animation resuming',
+    route: 'image/animation-resuming',
+    getComponent() {
+      return optionalRequire(() => require('./ImageAnimationResuming'));
+    },
+  },
+  {
+    name: 'List with thousands images',
+    route: 'image/flashlist',
+    options: {},
+    getComponent() {
+      return optionalRequire(() => require('./ImageFlashListScreen'));
+    },
+  },
+  {
+    name: 'Generate Placeholders',
+    route: 'image/generate-placeholders',
+    getComponent() {
+      return optionalRequire(() => require('./ImageGeneratePlaceholders'));
+    },
+  },
+  {
+    name: 'Image formats',
+    route: 'image/formats',
+    getComponent() {
+      return optionalRequire(() => require('./ImageFormatsScreen'));
+    },
+  },
+  {
+    name: 'Resizable image',
+    route: 'image/resizable',
+    getComponent() {
+      return optionalRequire(() => require('./ImageResizableScreen'));
+    },
+  },
+  {
+    name: 'Content fit and position',
+    route: 'image/content-fit',
+    getComponent() {
+      return optionalRequire(() => require('./ImageContentFitScreen'));
+    },
+  },
+  {
+    name: 'Events',
+    route: 'image/events',
+    getComponent() {
+      return optionalRequire(() => require('./ImageEventsScreen'));
+    },
+  },
+  {
+    name: 'Prioritizing images',
+    route: 'image/priority',
+    getComponent() {
+      return optionalRequire(() => require('./ImagePriorityScreen'));
+    },
+  },
+  {
+    name: 'Placeholder',
+    route: 'image/placeholder',
+    getComponent() {
+      return optionalRequire(() => require('./ImagePlaceholderScreen'));
+    },
+  },
+  {
+    name: 'Rendering a shared ref',
+    route: 'image/shared-ref',
+    getComponent() {
+      return optionalRequire(() => require('./ImageSharedRefScreen'));
+    },
+  },
+  {
+    name: 'Rendering a shared ref from ImageManipulator',
+    route: 'image/shared-ref-from-manipulator',
+    getComponent() {
+      return optionalRequire(() => require('./ImageSharedRefFromManipulator'));
+    },
+  },
+  {
+    name: 'Background',
+    route: 'image/background',
+    getComponent() {
+      return optionalRequire(() => require('./ImageBackgroundScreen'));
+    },
+  },
+  {
+    name: 'Static responsiveness using srcSet',
+    route: 'image/srcset',
+    getComponent() {
+      return optionalRequire(() => require('./ImageSrcSetScreen'));
+    },
+  },
+  {
+    name: 'Transitions',
+    route: 'image/transitions',
+    getComponent() {
+      return optionalRequire(() => require('./ImageTransitionsScreen'));
+    },
+  },
+  {
+    name: 'Tinting',
+    route: 'image/tinting',
+    getComponent() {
+      return optionalRequire(() => require('./ImageTintingScreen'));
+    },
+  },
+  {
+    name: 'Hash Placeholders',
+    route: 'image/hash-placeholders',
+    getComponent() {
+      return optionalRequire(() => require('./ImageHashPlaceholdersScreen'));
+    },
+  },
+  {
+    name: 'Custom cache key',
+    route: 'image/cache-key',
+    getComponent() {
+      return optionalRequire(() => require('./ImageCacheKeyScreen'));
+    },
+  },
+  {
+    name: 'List of GIFs',
+    route: 'image/gifs',
+    getComponent() {
+      return optionalRequire(() => require('./ImageGifsScreen'));
+    },
+  },
+  {
+    name: 'MediaLibrary and ImagePicker integration',
+    route: 'image/media-library',
+    getComponent() {
+      return optionalRequire(() => require('./ImageMediaLibraryScreen'));
+    },
+  },
+  {
+    name: 'Imperative API',
+    route: 'image/imperative-api',
+    getComponent() {
+      return optionalRequire(() => require('./ImageImperativeApiScreen'));
+    },
+  },
+];
+
+if (Platform.OS === 'ios') {
+  ImageScreens.push(
+    {
+      name: 'SF Symbols',
+      route: 'image/sf-symbols',
+      getComponent() {
+        return optionalRequire(() => require('./ImageSFSymbolScreen'));
+      },
+    },
+    {
+      name: 'Live Text Interaction',
+      route: 'image/live-text-interaction',
+      getComponent() {
+        return optionalRequire(() => require('./ImageLiveTextInteractionScreen'));
+      },
+    },
+    {
+      name: 'High Dynamic Range',
+      route: 'image/hdr',
+      getComponent() {
+        return optionalRequire(() => require('./ImageHDRScreen'));
+      },
+    },
+    {
+      name: 'Cache eviction',
+      route: 'image/cache-eviction',
+      getComponent() {
+        return optionalRequire(() => require('./ImageCacheEvictionScreen'));
+      },
+    }
+  );
+}
+
+if (Platform.OS === 'web') {
+  ImageScreens.push({
+    name: 'Lazy loading images',
+    route: 'image/lazy-loading',
+    getComponent() {
+      return optionalRequire(() => require('./ImageLazyLoadingScreen'));
+    },
+  });
+}
+
+export default function ImageScreen() {
+  const apis = componentScreensToListElements(ImageScreens);
+  return <ComponentListScreen apis={apis} sort={false} />;
+}
