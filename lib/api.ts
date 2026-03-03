@@ -11,7 +11,7 @@ const USE_MOCK = false; // 切换开关：true 使用 mock，false 使用真实 
  * 优先使用环境变量 EXPO_PUBLIC_API_BASE_URL，未配置时默认 http://localhost:4000
  */
 export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://192.168.101.26:4000';
+  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://172.19.8.35:4000';
 
 /**
  * 接口类型定义
@@ -26,12 +26,46 @@ export interface GenerateAppRequest {
   framework?: string;
 }
 
+export type AgentEventType =
+  | 'round_start'
+  | 'llm_response'
+  | 'tool_call'
+  | 'tool_result'
+  | 'finished';
+
+export interface AgentEvent {
+  stepId: number;
+  type: AgentEventType;
+  title: string;
+  detail?: string | null;
+}
+
 export interface GenerateAppResponse {
-  status: string;
+  status: 'completed';
   description: string;
   framework: string;
   logs: string[];
   summary: string;
+  taskId: string;
+  expoRoot: string;
+  expoUrl?: string | null;
+  /**
+   * AI 工作过程事件时间线。
+   * 旧版本后端可能没有该字段，因此前端使用时需做空数组兜底。
+   */
+  events?: AgentEvent[];
+}
+
+export interface StartGenerateAppResponse {
+  status: 'accepted';
+  taskId: string;
+  expoRoot: string;
+}
+
+export interface TaskStatusMessage {
+  type: 'task_status';
+  status: 'completed' | 'failed';
+  error?: string | null;
 }
 
 /**
@@ -108,17 +142,56 @@ export function generateApp(
 ): Promise<GenerateAppResponse> {
   const body: GenerateAppRequest = payload.framework
     ? {
-        description: payload.description,
-        framework: payload.framework,
-      }
+      description: payload.description,
+      framework: payload.framework,
+    }
     : {
-        description: payload.description,
-      };
+      description: payload.description,
+    };
 
   return request<GenerateAppResponse>('/tasks/generate-app', {
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+/**
+ * 异步生成应用任务：POST /tasks/generate-app-async
+ * 返回任务标识，用于后续通过 WebSocket 订阅进度。
+ */
+export function startGenerateAppAsync(
+  payload: GenerateAppRequest
+): Promise<StartGenerateAppResponse> {
+  const body: GenerateAppRequest = payload.framework
+    ? {
+      description: payload.description,
+      framework: payload.framework,
+    }
+    : {
+      description: payload.description,
+    };
+
+  return request<StartGenerateAppResponse>('/tasks/generate-app-async', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * 构造任务进度 WebSocket 地址
+ * 默认复用 API_BASE_URL 的主机与协议。
+ */
+export function buildTaskWsUrl(taskId: string): string {
+  try {
+    const baseUrl = new URL(API_BASE_URL);
+    const protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${baseUrl.host}/tasks/ws/${taskId}`;
+  } catch {
+    // API_BASE_URL 非法时的兜底逻辑
+    const protocol = API_BASE_URL.startsWith('https') ? 'wss' : 'ws';
+    const host = API_BASE_URL.replace(/^https?:\/\//, '');
+    return `${protocol}://${host}/tasks/ws/${taskId}`;
+  }
 }
 
 /**

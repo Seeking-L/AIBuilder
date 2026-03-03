@@ -15,8 +15,10 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useGenerateAppAsync } from '@/hooks/use-generate-app-async';
 import { useGenerateApp } from '@/hooks/use-generate-app';
 import { useHealthCheck } from '@/hooks/use-health-check';
+import type { AgentEvent, AgentEventType } from '@/lib/api';
 
 export default function GenerateAppScreen() {
   const [description, setDescription] = React.useState('');
@@ -37,6 +39,13 @@ export default function GenerateAppScreen() {
     error,
     runGenerateApp,
   } = useGenerateApp();
+
+  const {
+    status: asyncStatus,
+    events: asyncEvents,
+    error: asyncError,
+    start: startAsyncGenerate,
+  } = useGenerateAppAsync();
 
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
@@ -60,6 +69,25 @@ export default function GenerateAppScreen() {
   }, [description, framework, loading, runGenerateApp]);
 
   const hasResult = !!result;
+  const events: AgentEvent[] = result?.events ?? [];
+  const hasAsyncTask = asyncStatus !== 'idle';
+
+  const handleGenerateRealtime = useCallback(async () => {
+    const trimmed = description.trim();
+    if (
+      !trimmed ||
+      asyncStatus === 'starting' ||
+      asyncStatus === 'running'
+    ) {
+      if (!trimmed) {
+        setDescriptionError('请输入你想生成的应用需求');
+      }
+      return;
+    }
+
+    setDescriptionError(null);
+    await startAsyncGenerate(trimmed, framework.trim() || undefined);
+  }, [description, framework, asyncStatus, startAsyncGenerate]);
 
   return (
     <ThemedView
@@ -216,11 +244,96 @@ export default function GenerateAppScreen() {
           )}
         </TouchableOpacity>
 
+        {/* 实时生成按钮 */}
+        <TouchableOpacity
+          style={[
+            styles.secondaryButton,
+            {
+              borderColor: tintColor,
+            },
+            (!description.trim() ||
+              asyncStatus === 'starting' ||
+              asyncStatus === 'running') &&
+              styles.primaryButtonDisabled,
+          ]}
+          onPress={handleGenerateRealtime}
+          disabled={
+            !description.trim() ||
+            asyncStatus === 'starting' ||
+            asyncStatus === 'running'
+          }
+        >
+          <View style={styles.primaryButtonContent}>
+            {(asyncStatus === 'starting' || asyncStatus === 'running') && (
+              <ActivityIndicator color={tintColor} size="small" />
+            )}
+            {(asyncStatus === 'idle' || asyncStatus === 'completed' || asyncStatus === 'failed') && (
+              <IconSymbol
+                name="waveform.path.ecg"
+                size={20}
+                color={tintColor}
+              />
+            )}
+            <Text
+              style={[
+                styles.primaryButtonText,
+                { color: tintColor },
+              ]}
+            >
+              {asyncStatus === 'starting'
+                ? '创建任务中...'
+                : asyncStatus === 'running'
+                  ? '实时生成中...'
+                  : '实时生成（展示过程）'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
         {/* 错误信息 */}
         {error && (
           <ThemedText style={styles.errorHint}>
             {error.message || '生成任务执行失败，请稍后重试'}
           </ThemedText>
+        )}
+
+        {/* 实时任务进度状态 */}
+        {hasAsyncTask && (
+          <ThemedView style={styles.section}>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              实时生成进度
+            </ThemedText>
+            <View style={styles.asyncStatusRow}>
+              {(asyncStatus === 'starting' || asyncStatus === 'running') && (
+                <ActivityIndicator color={tintColor} size="small" />
+              )}
+              <ThemedText style={styles.asyncStatusText}>
+                {asyncStatus === 'starting' &&
+                  '任务创建中，请稍候，稍后会开始展示 AI 的工作过程。'}
+                {asyncStatus === 'running' &&
+                  'AI 正在工作中，下面的时间线会实时更新每一步操作。'}
+                {asyncStatus === 'completed' &&
+                  '任务已完成，你可以在时间线和生成结果中查看详情。'}
+                {asyncStatus === 'failed' &&
+                  '任务执行失败，请查看错误信息后重试。'}
+              </ThemedText>
+            </View>
+            {asyncError && (
+              <Text style={styles.errorText}>{asyncError}</Text>
+            )}
+            {asyncEvents.length > 0 && (
+              <>
+                <ThemedText
+                  style={[
+                    styles.timelineDescription,
+                    { color: Colors[colorScheme ?? 'light'].icon },
+                  ]}
+                >
+                  下面展示的是本次实时任务中 AI 的每一步思考和操作。
+                </ThemedText>
+                <AgentTimeline events={asyncEvents} />
+              </>
+            )}
+          </ThemedView>
         )}
 
         {/* 结果摘要 */}
@@ -235,6 +348,24 @@ export default function GenerateAppScreen() {
           </ThemedView>
         )}
 
+        {/* 同步任务的 AI 工作过程时间线 */}
+        {hasResult && events.length > 0 && (
+          <ThemedView style={styles.section}>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              上一次同步生成过程
+            </ThemedText>
+            <ThemedText
+              style={[
+                styles.timelineDescription,
+                { color: Colors[colorScheme ?? 'light'].icon },
+              ]}
+            >
+              下面展示的是本次任务中 AI 的每一步思考和操作，便于你理解过程。
+            </ThemedText>
+            <AgentTimeline events={events} />
+          </ThemedView>
+        )}
+
         {/* 执行日志 */}
         {hasResult && result?.logs?.length > 0 && (
           <ThemedView style={styles.section}>
@@ -243,7 +374,7 @@ export default function GenerateAppScreen() {
               onPress={() => setShowLogs((prev) => !prev)}
             >
               <ThemedText type="subtitle" style={styles.sectionTitle}>
-                执行详情
+                执行详情（调试日志）
               </ThemedText>
               <IconSymbol
                 name={showLogs ? 'chevron.up' : 'chevron.down'}
@@ -266,6 +397,57 @@ export default function GenerateAppScreen() {
           </ThemedView>
         )}
       </ScrollView>
+    </ThemedView>
+  );
+}
+
+function getEventColor(type: AgentEventType): string {
+  switch (type) {
+    case 'round_start':
+      return '#6b7280';
+    case 'llm_response':
+      return '#3b82f6';
+    case 'tool_call':
+      return '#f97316';
+    case 'tool_result':
+      return '#22c55e';
+    case 'finished':
+      return '#a855f7';
+    default:
+      return '#6b7280';
+  }
+}
+
+function AgentTimeline({ events }: { events: AgentEvent[] }) {
+  if (!events?.length) return null;
+
+  const sorted = events.slice().sort((a, b) => a.stepId - b.stepId);
+
+  return (
+    <ThemedView style={styles.timelineCard}>
+      {sorted.map((evt, index) => {
+        const color = getEventColor(evt.type);
+        return (
+          <View key={`${evt.stepId}-${evt.type}-${index}`} style={styles.timelineItem}>
+            <View style={styles.timelineItemHeader}>
+              <View
+                style={[styles.timelineDot, { backgroundColor: color }]}
+              />
+              <ThemedText style={styles.timelineItemTitle}>
+                {evt.title || `步骤 ${evt.stepId}`}
+              </ThemedText>
+              <Text style={[styles.timelineItemType, { color }]}>
+                {evt.type}
+              </Text>
+            </View>
+            {evt.detail && (
+              <View style={styles.timelineDetailBox}>
+                <Text style={styles.timelineDetailText}>{evt.detail}</Text>
+              </View>
+            )}
+          </View>
+        );
+      })}
     </ThemedView>
   );
 }
@@ -377,6 +559,16 @@ const styles = StyleSheet.create({
   primaryButtonDisabled: {
     opacity: 0.5,
   },
+  secondaryButton: {
+    marginTop: 8,
+    marginHorizontal: 16,
+    borderRadius: 24,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    backgroundColor: 'transparent',
+  },
   errorHint: {
     marginTop: 8,
     marginHorizontal: 16,
@@ -403,6 +595,62 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.04)',
   },
   logLine: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  timelineDescription: {
+    fontSize: 13,
+  },
+  asyncStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  asyncStatusText: {
+    flex: 1,
+    fontSize: 13,
+  },
+  timelineCard: {
+    marginTop: 4,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.08)',
+    gap: 8,
+  },
+  timelineItem: {
+    gap: 4,
+  },
+  timelineItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  timelineItemTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  timelineItemType: {
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'none',
+  },
+  timelineDetailBox: {
+    marginLeft: 16,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+  },
+  timelineDetailText: {
     fontFamily: Fonts.mono,
     fontSize: 12,
     lineHeight: 18,
