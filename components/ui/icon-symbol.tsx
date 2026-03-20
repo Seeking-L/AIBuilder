@@ -21,6 +21,7 @@ const MAPPING = {
   'trash': 'delete',
   'arrow.up': 'arrow-upward',
   'bubble.left.and.bubble.right': 'chat-bubble-outline',
+  'sidebar.left': 'menu',
 } as IconMapping;
 
 /**

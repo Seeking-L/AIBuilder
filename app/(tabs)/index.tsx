@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import * as Linking from 'expo-linking';
+
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -20,11 +22,15 @@ import { useGenerateApp } from '@/hooks/use-generate-app';
 import { useHealthCheck } from '@/hooks/use-health-check';
 import type { AgentEvent, AgentEventType } from '@/lib/api';
 
-export default function GenerateAppScreen() {
+export function GenerateAppScreen() {
   const [description, setDescription] = React.useState('');
   const [framework, setFramework] = React.useState('expo');
   const [descriptionError, setDescriptionError] = React.useState<string | null>(null);
   const [showLogs, setShowLogs] = React.useState(true);
+  const [openingExpoUrl, setOpeningExpoUrl] = React.useState(false);
+  const [openingExpoUrlError, setOpeningExpoUrlError] = React.useState<string | null>(
+    null,
+  );
 
   const {
     data: health,
@@ -45,6 +51,7 @@ export default function GenerateAppScreen() {
     events: asyncEvents,
     error: asyncError,
     start: startAsyncGenerate,
+    expoUrl: asyncExpoUrl,
   } = useGenerateAppAsync();
 
   const colorScheme = useColorScheme();
@@ -88,6 +95,33 @@ export default function GenerateAppScreen() {
     setDescriptionError(null);
     await startAsyncGenerate(trimmed, framework.trim() || undefined);
   }, [description, framework, asyncStatus, startAsyncGenerate]);
+
+  const handleViewApplication = useCallback(
+    async (expoUrl: string | null | undefined) => {
+      if (!expoUrl) return;
+      if (openingExpoUrl) return;
+
+      setOpeningExpoUrl(true);
+      setOpeningExpoUrlError(null);
+      try {
+        // 约定：后端传下来的链接应为 exp://...，直接交给 Expo Go 打开。
+        if (!expoUrl.startsWith('exp://')) {
+          setOpeningExpoUrlError('该应用链接不可用（非 exp://）。');
+          return;
+        }
+        await Linking.openURL(expoUrl);
+      } catch (e) {
+        console.error('Failed to open expo experience:', {
+          expoUrl,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        setOpeningExpoUrlError('打开失败，请确认设备已联网且安装 Expo Go。');
+      } finally {
+        setOpeningExpoUrl(false);
+      }
+    },
+    [openingExpoUrl],
+  );
 
   return (
     <ThemedView
@@ -333,6 +367,39 @@ export default function GenerateAppScreen() {
                 <AgentTimeline events={asyncEvents} />
               </>
             )}
+
+            {/* 实时任务：过程时间线下方（由 asyncExpoUrl 驱动） */}
+            {asyncExpoUrl ? (
+              <View style={styles.viewAppSection}>
+                <TouchableOpacity
+                  style={[
+                    styles.viewAppButton,
+                    {
+                      backgroundColor: tintColor,
+                      borderColor: tintColor,
+                      opacity: openingExpoUrl ? 0.7 : 1,
+                    },
+                  ]}
+                  onPress={() => void handleViewApplication(asyncExpoUrl)}
+                  disabled={openingExpoUrl}
+                >
+                  <View style={styles.viewAppButtonContent}>
+                    {openingExpoUrl ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <IconSymbol
+                        name="arrow.up.right.square.fill"
+                        size={18}
+                        color="#fff"
+                      />
+                    )}
+                    <ThemedText style={styles.viewAppButtonText}>
+                      查看应用
+                    </ThemedText>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </ThemedView>
         )}
 
@@ -365,6 +432,66 @@ export default function GenerateAppScreen() {
             <AgentTimeline events={events} />
           </ThemedView>
         )}
+
+        {/* 同步任务：时间线下方（由 result.expoUrl 驱动，展示优先级在时间线渲染之后） */}
+        {hasResult && events.length > 0 && result?.expoUrl ? (
+          <View style={styles.viewAppSection}>
+            <TouchableOpacity
+              style={[
+                styles.viewAppButton,
+                {
+                  backgroundColor: tintColor,
+                  borderColor: tintColor,
+                  opacity: openingExpoUrl ? 0.7 : 1,
+                },
+              ]}
+              onPress={() => void handleViewApplication(result.expoUrl)}
+              disabled={openingExpoUrl}
+            >
+              <View style={styles.viewAppButtonContent}>
+                {openingExpoUrl ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <IconSymbol name="arrow.up.right.square.fill" size={18} color="#fff" />
+                )}
+                <ThemedText style={styles.viewAppButtonText}>查看应用</ThemedText>
+              </View>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* 同步任务：若没有同步过程时间线，则把按钮放在“结果摘要”附近 */}
+        {hasResult && events.length === 0 && result?.expoUrl ? (
+          <View style={styles.viewAppSection}>
+            <TouchableOpacity
+              style={[
+                styles.viewAppButton,
+                {
+                  backgroundColor: tintColor,
+                  borderColor: tintColor,
+                  opacity: openingExpoUrl ? 0.7 : 1,
+                },
+              ]}
+              onPress={() => void handleViewApplication(result.expoUrl)}
+              disabled={openingExpoUrl}
+            >
+              <View style={styles.viewAppButtonContent}>
+                {openingExpoUrl ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <IconSymbol name="arrow.up.right.square.fill" size={18} color="#fff" />
+                )}
+                <ThemedText style={styles.viewAppButtonText}>查看应用</ThemedText>
+              </View>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {openingExpoUrlError ? (
+          <Text style={styles.viewAppErrorText}>
+            {openingExpoUrlError}
+          </Text>
+        ) : null}
 
         {/* 执行日志 */}
         {hasResult && result?.logs?.length > 0 && (
@@ -655,5 +782,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+
+  viewAppSection: {
+    marginTop: 10,
+    marginHorizontal: 16,
+    gap: 8,
+  },
+  viewAppButton: {
+    borderRadius: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  viewAppButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  viewAppButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  viewAppErrorText: {
+    marginTop: 8,
+    marginHorizontal: 16,
+    fontSize: 13,
+    color: '#ef4444',
+  },
 });
+
+// 默认路由导出：切换到多对话聊天页实现
+export { default } from './chat';
 

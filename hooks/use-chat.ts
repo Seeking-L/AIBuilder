@@ -1,5 +1,9 @@
-import { useState, useCallback } from 'react';
-import { sendMessage } from '@/lib/api';
+import { useCallback, useEffect, useMemo } from 'react';
+
+import type { ConversationMessage } from '@/lib/api';
+
+import { useConversationMessages } from '@/hooks/use-conversation-messages';
+import { useConversationRun } from '@/hooks/use-conversation-run';
 
 export type MessageRole = 'user' | 'assistant';
 
@@ -18,79 +22,64 @@ export interface UseChatReturn {
 }
 
 /**
- * 生成唯一 ID
+ * Chat Hook（多对话窗口版本）
+ *
+ * 该 hook 的职责调整为：
+ * - 消息历史：来自后端 `GET /conversations/{conversationId}/messages`
+ * - 发送消息：通过后端触发 run（`POST /conversations/{conversationId}/messages`）
+ * - WS 推送：由 `useConversationRun` 负责；本 hook 在 run 结束后自动 reload messages
  */
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
+export function useChat(
+  conversationId: string | null,
+): UseChatReturn {
+  const { messages: conversationMessages, loading: messagesLoading, reload } =
+    useConversationMessages(conversationId);
+  const { wsStatus, send, error } = useConversationRun(conversationId);
 
-/**
- * Chat Hook - 管理对话状态和逻辑
- */
-export function useChat(): UseChatReturn {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(false);
+  // 只把 user/assistant 映射成聊天气泡；tool 消息通常用于调试/终端渲染，本聊天 UI 先隐藏。
+  const messages = useMemo((): Message[] => {
+    const filtered = conversationMessages.filter(
+      (m: ConversationMessage): m is ConversationMessage & { role: MessageRole } =>
+        m.role === 'user' || m.role === 'assistant',
+    );
 
-  /**
-   * 发送消息
-   */
-  const handleSendMessage = useCallback(async (text: string) => {
-    const trimmedText = text.trim();
-    if (!trimmedText || loading) {
-      return;
+    // 后端 messages 当前类型未提供稳定 message id，因此用 index 生成可用 key。
+    return filtered.map((m, index) => ({
+      id: `${conversationId ?? 'no-conv'}-${index}-${m.role}`,
+      role: m.role,
+      content: m.content,
+      timestamp: index, // 用 index 提供稳定但无需严格意义的 timestamp
+    }));
+  }, [conversationId, conversationMessages]);
+
+  // 如果 run 正在执行，或者消息正在重新拉取，则认为整体处于 loading。
+  const loading = messagesLoading || wsStatus === 'running';
+
+  useEffect(() => {
+    // run 结束后重新拉取 messages，确保切换 conversation/刷新后消息一致
+    if (wsStatus === 'completed' || wsStatus === 'failed') {
+      void reload();
     }
+  }, [reload, wsStatus]);
 
-    // 添加用户消息
-    const userMessage: Message = {
-      id: generateId(),
-      role: 'user',
-      content: trimmedText,
-      timestamp: Date.now(),
-    };
+  const sendMessage = useCallback(
+    async (text: string) => {
+      // error 变量目前不直接展示，由上层 UI 决策；这里确保 send 不因为空 conversationId 崩溃
+      void error;
+      await send(text);
+    },
+    [error, send],
+  );
 
-    setMessages((prev) => [...prev, userMessage]);
-    setLoading(true);
-
-    try {
-      // 调用 API 获取 AI 回复
-      const reply = await sendMessage(trimmedText);
-
-      // 添加 AI 消息
-      const assistantMessage: Message = {
-        id: generateId(),
-        role: 'assistant',
-        content: reply,
-        timestamp: Date.now(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      // 错误处理：添加错误消息
-      const errorMessage: Message = {
-        id: generateId(),
-        role: 'assistant',
-        content: '抱歉，发送消息时出现了错误，请稍后重试。',
-        timestamp: Date.now(),
-      };
-
-      setMessages((prev) => [...prev, errorMessage]);
-      console.error('Failed to send message:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [loading]);
-
-  /**
-   * 清空消息
-   */
   const clearMessages = useCallback(() => {
-    setMessages([]);
-  }, []);
+    // 后端没有“删除对话消息”的接口时，clear 的最佳可行实现是重新加载历史
+    void reload();
+  }, [reload]);
 
   return {
     messages,
     loading,
-    sendMessage: handleSendMessage,
+    sendMessage,
     clearMessages,
   };
 }

@@ -22,6 +22,7 @@ export interface UseGenerateAppAsyncReturn {
   events: AgentEvent[];
   error: string | null;
   expoRoot: string | null;
+  expoUrl: string | null;
   start: (description: string, framework?: string) => Promise<void>;
   cancel: () => void;
 }
@@ -32,6 +33,7 @@ export function useGenerateAppAsync(): UseGenerateAppAsyncReturn {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [expoRoot, setExpoRoot] = useState<string | null>(null);
+  const [expoUrl, setExpoUrl] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -59,6 +61,7 @@ export function useGenerateAppAsync(): UseGenerateAppAsyncReturn {
       setError(null);
       setEvents([]);
       setExpoRoot(null);
+      setExpoUrl(null);
 
       try {
         const payload: GenerateAppRequest = framework
@@ -92,11 +95,31 @@ export function useGenerateAppAsync(): UseGenerateAppAsyncReturn {
               if (msg.error) {
                 setError(msg.error);
               }
+
+              // completed 兜底：从 task_status 结束消息拿到可打开的 expoUrl（如果后端提供）
+              if (msg.status === 'completed' && msg.expoUrl) {
+                const nextUrl = msg.expoUrl.trim();
+                if (nextUrl.startsWith('exp://')) {
+                  setExpoUrl(nextUrl);
+                }
+              }
+
               closeWebSocket();
               return;
             }
 
-            setEvents((prev) => [...prev, data as AgentEvent]);
+            const evt = data as AgentEvent;
+
+            // expo_url_ready：只作为按钮数据来源，不进入 timeline events
+            if (evt.type === 'expo_url_ready') {
+              const nextUrl = (evt.detail ?? '').trim();
+              if (nextUrl && nextUrl.startsWith('exp://')) {
+                setExpoUrl(nextUrl);
+              }
+              return;
+            }
+
+            setEvents((prev) => [...prev, evt]);
           } catch {
             // 忽略无法解析的消息
           }
@@ -123,6 +146,7 @@ export function useGenerateAppAsync(): UseGenerateAppAsyncReturn {
     closeWebSocket();
     setStatus('idle');
     setTaskId(null);
+    setExpoUrl(null);
   }, [closeWebSocket]);
 
   useEffect(() => {
@@ -137,6 +161,7 @@ export function useGenerateAppAsync(): UseGenerateAppAsyncReturn {
     events,
     error,
     expoRoot,
+    expoUrl,
     start,
     cancel,
   };
