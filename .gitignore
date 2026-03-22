@@ -41,3 +41,10 @@ app-example
 # generated native folders
 /ios
 /android
+
+################################
+# 临时文档目录：仅跟踪 temp_doc/README.md，其余一律忽略
+# 说明：temp_doc/* 匹配该目录下所有直接条目（含子目录）；否定规则 ! 仅恢复 README.md
+################################
+temp_doc/*
+!temp_doc/README.md

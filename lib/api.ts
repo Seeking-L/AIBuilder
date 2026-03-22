@@ -11,7 +11,7 @@ const USE_MOCK = false; // 切换开关：true 使用 mock，false 使用真实 
  * 优先使用环境变量 EXPO_PUBLIC_API_BASE_URL，未配置时默认 http://localhost:4000
  */
 export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://10.100.22.35:4000';
+  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://47.122.120.208:4000';
 
 /**
  * 接口类型定义
